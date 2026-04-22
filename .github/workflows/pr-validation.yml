@@ -37,11 +37,25 @@ jobs:
             --configuration Release \
             /p:CollectCoverage=true \
             /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=${{ github.workspace }}/coverage.cobertura.xml
+            /p:CoverletOutput=${{ github.workspace }}/coverage/
+
+      - name: Debug — conferir arquivos e refs
+        if: always()
+        run: |
+          echo "--- workspace ---"
+          ls -la ${{ github.workspace }}
+          echo "--- coverage dir ---"
+          ls -la ${{ github.workspace }}/coverage || echo "(vazio)"
+          echo "--- busca cobertura em todo workspace ---"
+          find ${{ github.workspace }} -name '*.cobertura.xml' -type f 2>/dev/null
+          echo "--- git refs ---"
+          git for-each-ref --format='%(refname)' | head -20
+          echo "--- base ref reachable? ---"
+          git log --oneline origin/${{ github.base_ref }} -1 2>&1 || echo "(falhou)"
 
       - name: Gerar relatório diff-cover
         run: |
-          diff-cover coverage.cobertura.xml \
+          diff-cover ${{ github.workspace }}/coverage/coverage.cobertura.xml \
             --compare-branch=origin/${{ github.base_ref }} \
             --markdown-report=diff-cover-report.md
           echo "--- Relatório ---"
@@ -56,6 +70,6 @@ jobs:
 
       - name: Gate de cobertura do código novo (falha se < 80%)
         run: |
-          diff-cover coverage.cobertura.xml \
+          diff-cover ${{ github.workspace }}/coverage/coverage.cobertura.xml \
             --compare-branch=origin/${{ github.base_ref }} \
             --fail-under=80
