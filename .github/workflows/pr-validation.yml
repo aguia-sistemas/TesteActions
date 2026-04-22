@@ -1,0 +1,57 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  test-coverage:
+    name: Testes + cobertura do código novo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout (histórico completo para diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar diff-cover
+        run: pip install diff-cover
+
+      - name: Testes + cobertura (coverlet)
+        run: |
+          dotnet test \
+            --configuration Release \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput=${{ github.workspace }}/coverage.cobertura.xml
+
+      - name: Gate de cobertura do código novo (diff-cover)
+        id: diff-cover
+        run: |
+          diff-cover coverage.cobertura.xml \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=80 \
+            --markdown-report=diff-cover-report.md
+          echo "--- Relatório ---"
+          cat diff-cover-report.md
+
+      - name: Comentar resultado no PR
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: diff-coverage
+          path: diff-cover-report.md
