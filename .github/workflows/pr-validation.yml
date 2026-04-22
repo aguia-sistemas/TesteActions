@@ -31,27 +31,41 @@ jobs:
       - name: Instalar diff-cover
         run: pip install diff-cover
 
-      - name: Testes + cobertura (coverlet)
+      - name: Testes + cobertura (coverlet.collector)
         run: |
           dotnet test \
             --configuration Release \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=${{ github.workspace }}/coverage.cobertura.xml
+            --collect:"XPlat Code Coverage" \
+            --results-directory ${{ github.workspace }}/coverage
 
-      - name: Gate de cobertura do código novo (diff-cover)
-        id: diff-cover
+      - name: Localizar arquivo de cobertura
         run: |
-          diff-cover coverage.cobertura.xml \
+          COVERAGE_FILE=$(find ${{ github.workspace }}/coverage -name 'coverage.cobertura.xml' -type f | head -1)
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "::error::coverage.cobertura.xml não foi gerado pelos testes"
+            find ${{ github.workspace }}/coverage -type f || true
+            exit 1
+          fi
+          echo "COVERAGE_FILE=$COVERAGE_FILE" >> $GITHUB_ENV
+          echo "Arquivo de cobertura: $COVERAGE_FILE"
+
+      - name: Gerar relatório diff-cover
+        run: |
+          diff-cover "$COVERAGE_FILE" \
             --compare-branch=origin/${{ github.base_ref }} \
-            --fail-under=80 \
             --markdown-report=diff-cover-report.md
           echo "--- Relatório ---"
           cat diff-cover-report.md
 
       - name: Comentar resultado no PR
-        if: always()
+        if: always() && hashFiles('diff-cover-report.md') != ''
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: diff-coverage
           path: diff-cover-report.md
+
+      - name: Gate de cobertura do código novo (falha se < 80%)
+        run: |
+          diff-cover "$COVERAGE_FILE" \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=80
