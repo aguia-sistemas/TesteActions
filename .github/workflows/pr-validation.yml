@@ -39,12 +39,10 @@ jobs:
             /p:CoverletOutputFormat=cobertura \
             /p:CoverletOutput=${{ github.workspace }}/coverage.cobertura.xml
 
-      - name: Gate de cobertura do código novo (diff-cover)
-        id: diff-cover
+      - name: Gerar relatório diff-cover
         run: |
           diff-cover coverage.cobertura.xml \
             --compare-branch=origin/${{ github.base_ref }} \
-            --fail-under=80 \
             --markdown-report=diff-cover-report.md
           echo "--- Relatório ---"
           cat diff-cover-report.md
@@ -55,3 +53,9 @@ jobs:
         with:
           header: diff-coverage
           path: diff-cover-report.md
+
+      - name: Gate de cobertura do código novo (falha se < 80%)
+        run: |
+          diff-cover coverage.cobertura.xml \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=80
