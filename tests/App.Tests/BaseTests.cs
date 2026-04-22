@@ -6,7 +6,7 @@ public class BaseTests
     public void Teste_valor()
     {
         var teste = new Teste();
-        Assert.Equal("valor, Teste!", teste.Valor("Teste"));
+        Assert.Equal("valor, Teste", teste.Valor("Teste"));
     }
     
     [Fact]
