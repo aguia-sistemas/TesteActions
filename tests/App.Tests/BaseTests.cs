@@ -20,6 +20,6 @@ public class BaseTests
     public void Teste_valor3()
     {
         var teste = new Teste();
-        Assert.Equal("valor, Teste!", teste.Valor3("Teste"));
+        Assert.Equal("valor3, Teste!", teste.Valor3("Teste"));
     }
 }
