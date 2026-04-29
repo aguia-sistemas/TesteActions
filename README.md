@@ -2,6 +2,7 @@
 
 Projeto simples em .NET para validar pipeline de CI no GitHub Actions.
 
+
 ## Estrutura
 
 ```
@@ -15,3 +16,5 @@ TesteActions.sln
 ```bash
 dotnet test
 ```
+## Opcional
+# Test Asana
