@@ -9,13 +9,14 @@ jobs:
     name: Testes + cobertura do código novo
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write           # precisa pra commitar README de volta na branch do PR
       pull-requests: write
 
     steps:
-      - name: Checkout (histórico completo para diff)
+      - name: Checkout (na branch do PR, com histórico completo)
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}      # branch do PR (não o merge ref)
           fetch-depth: 0
 
       - name: Setup .NET
@@ -69,3 +70,78 @@ jobs:
           diff-cover "$COVERAGE_FILE" \
             --compare-branch=origin/${{ github.base_ref }} \
             --fail-under=80
+
+      - name: Atualiza seção de cobertura no README
+        if: always() && env.COVERAGE_FILE != ''
+        run: |
+          python3 <<'PY'
+          import xml.etree.ElementTree as ET
+          import os, re
+          from datetime import datetime, timezone, timedelta
+
+          tree = ET.parse(os.environ['COVERAGE_FILE'])
+          root = tree.getroot()
+
+          line_rate = float(root.attrib['line-rate']) * 100
+          branch_rate = float(root.attrib['branch-rate']) * 100
+          lines_covered = int(root.attrib['lines-covered'])
+          lines_valid = int(root.attrib['lines-valid'])
+
+          packages = []
+          for pkg in root.findall('.//package'):
+              name = pkg.attrib['name']
+              rate = float(pkg.attrib['line-rate']) * 100
+              packages.append((name, rate))
+          packages.sort(key=lambda x: x[1], reverse=True)
+
+          if line_rate >= 80:   color = 'brightgreen'
+          elif line_rate >= 60: color = 'green'
+          elif line_rate >= 40: color = 'yellow'
+          elif line_rate >= 20: color = 'orange'
+          else:                 color = 'red'
+
+          br_tz = timezone(timedelta(hours=-3))
+          today = datetime.now(br_tz).strftime('%d/%m/%Y')
+
+          lines = ['<!-- COVERAGE-START -->']
+          lines.append(f'![Coverage](https://img.shields.io/badge/coverage-{line_rate:.1f}%25-{color})')
+          lines.append('')
+          lines.append('| Componente | Cobertura |')
+          lines.append('|---|---|')
+          lines.append(f'| **Total** | **{line_rate:.1f}%** ({lines_covered}/{lines_valid} linhas) |')
+          for name, rate in packages:
+              lines.append(f'| `{name}` | {rate:.1f}% |')
+          lines.append('')
+          lines.append(f'_Branches: {branch_rate:.1f}% — atualizado em {today}_')
+          lines.append('<!-- COVERAGE-END -->')
+          new_section = '\n'.join(lines)
+
+          with open('README.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          pattern = re.compile(r'<!-- COVERAGE-START -->.*?<!-- COVERAGE-END -->', re.DOTALL)
+          if pattern.search(content):
+              new_content = pattern.sub(new_section, content)
+          else:
+              new_content = content.rstrip() + '\n\n## Cobertura de Testes\n\n' + new_section + '\n'
+
+          if new_content != content:
+              with open('README.md', 'w', encoding='utf-8') as f:
+                  f.write(new_content)
+              print(f"README atualizado: cobertura total = {line_rate:.1f}%")
+          else:
+              print("README já está atualizado, sem mudanças")
+          PY
+
+      - name: Commit e push do README na branch do PR
+        if: always() && env.COVERAGE_FILE != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "Nenhuma mudança no README — sem commit"
+          else
+            git commit -m "docs: atualiza cobertura no README"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
