@@ -1,0 +1,134 @@
+name: Atualiza cobertura no README
+
+on:
+  push:
+    branches: [develop]
+
+# Evita rodar quando o próprio workflow committar (ver `[skip ci]`).
+# Também evita rodar em paralelo com versões anteriores ainda em execução.
+concurrency:
+  group: coverage-readme-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-readme:
+    name: Calcula cobertura e atualiza README
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # precisa pra commitar o README de volta
+
+    # Pula se o último commit foi do próprio bot (segurança extra contra loop)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Testes + cobertura
+        run: |
+          dotnet test \
+            --configuration Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ${{ github.workspace }}/coverage
+
+      - name: Localizar e mesclar cobertura
+        run: |
+          FILES=$(find ${{ github.workspace }}/coverage -name 'coverage.cobertura.xml' -type f)
+          if [ -z "$FILES" ]; then
+            echo "::error::Nenhum coverage.cobertura.xml gerado"
+            exit 1
+          fi
+          COUNT=$(echo "$FILES" | wc -l)
+          if [ "$COUNT" -gt 1 ]; then
+            dotnet tool install -g dotnet-reportgenerator-globaltool
+            reportgenerator \
+              "-reports:${{ github.workspace }}/coverage/**/coverage.cobertura.xml" \
+              "-targetdir:${{ github.workspace }}/coverage-merged" \
+              "-reporttypes:Cobertura"
+            echo "COVERAGE_FILE=${{ github.workspace }}/coverage-merged/Cobertura.xml" >> $GITHUB_ENV
+          else
+            echo "COVERAGE_FILE=$FILES" >> $GITHUB_ENV
+          fi
+
+      - name: Atualiza seção de cobertura no README
+        run: |
+          python3 <<'PY'
+          import xml.etree.ElementTree as ET
+          import os, re
+          from datetime import datetime, timezone, timedelta
+
+          tree = ET.parse(os.environ['COVERAGE_FILE'])
+          root = tree.getroot()
+
+          line_rate = float(root.attrib['line-rate']) * 100
+          branch_rate = float(root.attrib['branch-rate']) * 100
+          lines_covered = int(root.attrib['lines-covered'])
+          lines_valid = int(root.attrib['lines-valid'])
+
+          # Cobertura por pacote (assembly)
+          packages = []
+          for pkg in root.findall('.//package'):
+              name = pkg.attrib['name']
+              rate = float(pkg.attrib['line-rate']) * 100
+              packages.append((name, rate))
+          packages.sort(key=lambda x: x[1], reverse=True)
+
+          # Cor do badge baseado no valor
+          if line_rate >= 80:   color = 'brightgreen'
+          elif line_rate >= 60: color = 'green'
+          elif line_rate >= 40: color = 'yellow'
+          elif line_rate >= 20: color = 'orange'
+          else:                 color = 'red'
+
+          br_tz = timezone(timedelta(hours=-3))
+          today = datetime.now(br_tz).strftime('%d/%m/%Y')
+
+          lines = ['<!-- COVERAGE-START -->']
+          lines.append(f'![Coverage](https://img.shields.io/badge/coverage-{line_rate:.1f}%25-{color})')
+          lines.append('')
+          lines.append('| Componente | Cobertura |')
+          lines.append('|---|---|')
+          lines.append(f'| **Total** | **{line_rate:.1f}%** ({lines_covered}/{lines_valid} linhas) |')
+          for name, rate in packages:
+              lines.append(f'| `{name}` | {rate:.1f}% |')
+          lines.append('')
+          lines.append(f'_Branches: {branch_rate:.1f}% — atualizado em {today}_')
+          lines.append('<!-- COVERAGE-END -->')
+          new_section = '\n'.join(lines)
+
+          with open('README.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          pattern = re.compile(r'<!-- COVERAGE-START -->.*?<!-- COVERAGE-END -->', re.DOTALL)
+          if pattern.search(content):
+              new_content = pattern.sub(new_section, content)
+          else:
+              new_content = content.rstrip() + '\n\n## Cobertura de Testes\n\n' + new_section + '\n'
+
+          if new_content != content:
+              with open('README.md', 'w', encoding='utf-8') as f:
+                  f.write(new_content)
+              print(f"README atualizado: cobertura total = {line_rate:.1f}%")
+          else:
+              print("README já está atualizado, nenhum commit necessário")
+          PY
+
+      - name: Commit e push se houver mudança
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "Nenhuma mudança no README — pulando commit"
+          else
+            git commit -m "docs: atualiza cobertura no README [skip ci]"
+            git push
+          fi
