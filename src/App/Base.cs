@@ -7,4 +7,6 @@ public class Teste
     public string Valor2(string valor) => $"valor2, {valor}!";
     
     public string Valor3(string valor) => $"valor3, {valor}!";
+    
+    public string Valor4(string valor) => $"valor4, {valor}!";
 }
