@@ -69,3 +69,18 @@ jobs:
           diff-cover "$COVERAGE_FILE" \
             --compare-branch=origin/${{ github.base_ref }} \
             --fail-under=80
+
+      - name: Conferir se README está atualizado com a cobertura
+        run: |
+          # Roda o script só com o passo de atualizar o README
+          # (reusa a cobertura já calculada no step anterior)
+          ./scripts/update-readme-coverage.sh --skip-tests
+
+          if ! git diff --quiet README.md; then
+            echo "::error::README está desatualizado. Rode './scripts/update-readme-coverage.sh' localmente, commite o README, e faça push."
+            echo ""
+            echo "--- Diferença que o CI gerou ---"
+            git --no-pager diff README.md
+            exit 1
+          fi
+          echo "✅ README está atualizado"
