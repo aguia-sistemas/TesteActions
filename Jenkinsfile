@@ -10,7 +10,6 @@ pipeline {
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOCKER_REGISTRY_URL = '172.210.56.254:21114'
         DOCKER_IMAGE_NAME = 'testeactions'
-        DOCKER_REGISTRY_CREDENTIALS_ID = 'docker-registry-credentials'
         PUBLISH_DOCKER_BRANCH = 'develop'
     }
 
@@ -70,39 +69,21 @@ pipeline {
             }
             steps {
                 script {
-                    if (env.DOCKER_REGISTRY_URL == 'IP_DA_SUA_VM:21114') {
-                        error 'Configure DOCKER_REGISTRY_URL no Jenkinsfile antes de publicar no registry da VM.'
-                    }
-
                     def commitTag = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER
                     def versionTag = "${env.BUILD_NUMBER}-${commitTag}"
                     def imageRepository = "${env.DOCKER_REGISTRY_URL}/${env.DOCKER_IMAGE_NAME}"
 
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
-                            usernameVariable: 'DOCKER_REGISTRY_USERNAME',
-                            passwordVariable: 'DOCKER_REGISTRY_PASSWORD'
-                        )
-                    ]) {
-                        sh """
-                            set -e
+                    sh """
+                        set -e
 
-                            echo "\$DOCKER_REGISTRY_PASSWORD" | docker login ${env.DOCKER_REGISTRY_URL} \
-                                --username "\$DOCKER_REGISTRY_USERNAME" \
-                                --password-stdin
+                        docker build \
+                            --tag ${imageRepository}:${versionTag} \
+                            --tag ${imageRepository}:latest \
+                            .
 
-                            docker build \
-                                --tag ${imageRepository}:${versionTag} \
-                                --tag ${imageRepository}:latest \
-                                .
-
-                            docker push ${imageRepository}:${versionTag}
-                            docker push ${imageRepository}:latest
-
-                            docker logout ${env.DOCKER_REGISTRY_URL}
-                        """
-                    }
+                        docker push ${imageRepository}:${versionTag}
+                        docker push ${imageRepository}:latest
+                    """
                 }
             }
         }
