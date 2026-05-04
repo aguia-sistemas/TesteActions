@@ -8,7 +8,7 @@ pipeline {
     environment {
         DOTNET_NOLOGO = 'true'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        DOCKER_REGISTRY_URL = '172.210.56.254:21114'
+        DOCKER_REGISTRY_URL = 'wcs01.aguiasistemas.com.br'
         DOCKER_IMAGE_NAME = 'testeactions'
         DOCKER_REGISTRY_CREDENTIALS_ID = 'docker-registry-credentials'
         PUBLISH_DOCKER_BRANCH = 'develop'
@@ -70,8 +70,11 @@ pipeline {
             }
             steps {
                 script {
-                    def commitTag = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER
-                    def versionTag = "${env.BUILD_NUMBER}-${commitTag}"
+                    if (!env.GIT_COMMIT) {
+                        error "GIT_COMMIT não disponível — não é possível gerar a tag"
+                    }
+                    def shortSha = env.GIT_COMMIT.take(7)
+                    def versionTag = "dev_${shortSha}"
                     def imageRepository = "${env.DOCKER_REGISTRY_URL}/${env.DOCKER_IMAGE_NAME}"
 
                     withCredentials([
@@ -90,15 +93,15 @@ pipeline {
 
                             docker build \
                                 --tag ${imageRepository}:${versionTag} \
-                                --tag ${imageRepository}:latest \
                                 .
 
                             docker push ${imageRepository}:${versionTag}
-                            docker push ${imageRepository}:latest
 
                             docker logout ${env.DOCKER_REGISTRY_URL}
                         """
                     }
+
+                    echo "Imagem publicada: ${imageRepository}:${versionTag}"
                 }
             }
         }
