@@ -10,6 +10,7 @@ pipeline {
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOCKER_REGISTRY_URL = '172.210.56.254:21114'
         DOCKER_IMAGE_NAME = 'testeactions'
+        DOCKER_REGISTRY_CREDENTIALS_ID = 'docker-registry-credentials'
         PUBLISH_DOCKER_BRANCH = 'develop'
     }
 
@@ -72,17 +73,31 @@ pipeline {
                     def versionTag = "${env.BUILD_NUMBER}-${commitTag}"
                     def imageRepository = "${env.DOCKER_REGISTRY_URL}/${env.DOCKER_IMAGE_NAME}"
 
-                    sh """
-                        set -e
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: env.DOCKER_REGISTRY_CREDENTIALS_ID,
+                            usernameVariable: 'REG_USER',
+                            passwordVariable: 'REG_PASS'
+                        )
+                    ]) {
+                        sh """
+                            set -e
 
-                        docker build \
-                            --tag ${imageRepository}:${versionTag} \
-                            --tag ${imageRepository}:latest \
-                            .
+                            echo "\$REG_PASS" | docker login ${env.DOCKER_REGISTRY_URL} \
+                                --username "\$REG_USER" \
+                                --password-stdin
 
-                        docker push ${imageRepository}:${versionTag}
-                        docker push ${imageRepository}:latest
-                    """
+                            docker build \
+                                --tag ${imageRepository}:${versionTag} \
+                                --tag ${imageRepository}:latest \
+                                .
+
+                            docker push ${imageRepository}:${versionTag}
+                            docker push ${imageRepository}:latest
+
+                            docker logout ${env.DOCKER_REGISTRY_URL}
+                        """
+                    }
                 }
             }
         }
