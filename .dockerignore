@@ -1,0 +1,8 @@
+.codex/
+.git/
+.vs/
+.vscode/
+coverage/
+**/bin/
+**/obj/
+diff-cover-report.md
