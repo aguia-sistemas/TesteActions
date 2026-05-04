@@ -17,7 +17,7 @@ pipeline {
     stages {
         stage('Restore + Build') {
             steps {
-                sh 'dotnet build --configuration Release'
+                sh 'dotnet build --configuration Release -m:1'
             }
         }
 
@@ -29,7 +29,8 @@ pipeline {
                         --no-build \
                         --configuration Release \
                         --collect:"XPlat Code Coverage" \
-                        --results-directory ./coverage
+                        --results-directory ./coverage \
+                        -m:1
                 '''
             }
         }
