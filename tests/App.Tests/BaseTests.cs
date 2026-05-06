@@ -36,4 +36,11 @@ public class BaseTests
         var teste = new Teste();
         Assert.Equal("valor5, Teste!", teste.Valor5("Teste"));
     }
+    
+    [Fact]
+    public void Teste_valor6()
+    {
+        var teste = new Teste();
+        Assert.Equal("valor6, Teste!", teste.Valor6("Teste"));
+    }
 }
